@@ -1,0 +1,194 @@
+#! /usr/bin/perl
+
+#################################################################
+#	Global Variables
+#################################################################
+
+use strict;
+
+use Data::Dumper;
+$Data::Dumper::Sortkeys = 1;
+
+package main;
+
+our @ARGS = @ARGV;
+our $Line = 0;
+our $Lvl = 0;
+
+#################################################################
+#	The PKG Object
+#################################################################
+
+package Pkg;
+
+#################################################################
+# Class Variables
+#################################################################
+
+our @All = ();
+our %Named = ();
+our %Owner = ();
+our %Provider = ();
+
+our %File = ();
+
+#################################################################
+# Class Functions
+#################################################################
+
+sub name
+{
+	my $self = shift;
+	$self->{name};
+}
+
+#################################################################
+# Initialize Name/Version/Release/Arch
+#	format: /path/name-release-version.arch.rpm
+#################################################################
+
+sub initname
+{
+	my $self = shift;
+
+	my @file = split(/\//, $self->{pkg});
+	$self->{file} = pop(@file);		# last is file
+	$self->{dir}  = join('/', @file);	# others are dirs
+
+	my @name = split(/-/, $self->{file});
+	$self->{rel} = pop(@name);		# last is release
+	$self->{ver} = pop(@name);		# next is version
+	my $name = join('-', @name);		# rest is name
+	$self->{name} = $name;
+
+	push(@Pkg::All, $Pkg::Named{$name} = $self);
+
+	my @arch = split(/\./, $self->{rel});
+	pop @arch ; # nuke .rpm suffix		# last is '.rpm'
+	$self->{arch} = pop(@arch);		# next is arch
+	$self->{rel} = join('.', @arch);	# rest is release
+
+}
+
+#################################################################
+# Initialize Provides List
+#################################################################
+
+sub initpro
+{
+	my $self = shift;
+	my $name = $self->{name};
+	my ($key, $val);
+
+	chomp(my @pro  = `rpm -qp --provides $self->{pkg}`);
+	$self->{prx} = [ @pro ];
+	$self->{pro} = { };
+	for (@pro)
+	{
+		s/ //g;				# nuke whitespace
+		next if /[()]/;			# parens evil
+		$val = $key = $_;
+		$key =~ s/[<=>()].*//;		# find key
+		$val =~ s/.*[<=>()]//;		# find value
+
+		$self->{pro}{$key} = $val;	# store
+		$Pkg::Provider{$key} = $name;
+	}
+}
+
+#################################################################
+# Initialize Require List
+#################################################################
+
+sub initreq
+{
+	my $self = shift;
+	my ($key, $val);
+
+	chomp(my @req  = `rpm -qp --requires $self->{pkg}`);
+	$self->{rex} = [ @req ];
+	$self->{req} = { };
+	for (@req)
+	{
+		s/ //g;
+		next if /[()]/;
+		$val = $key = $_;
+		$key =~ s/[<=>()].*//;
+		$val =~ s/.*[<=>()]//;
+
+		$self->{req}{$key} = $val;
+	}
+}
+
+#################################################################
+# Initialize File List
+#################################################################
+
+sub initlist
+{
+	my $self = shift;
+	my $name = $self->{name};
+	chomp(my @list = `rpm -qp --list     $self->{pkg}`);
+	map	{ s/ //g; }		@list;
+	map	{ $Owner{$_} = $name; }	@list;
+}
+
+#################################################################
+# Constructor
+#################################################################
+
+sub new
+{
+	my $class = shift;
+	my $pkg   = shift;
+
+warn "new($class, $pkg)\n" ;
+
+	warn("ERROR: Not a Package File: $pkg\n") && return undef 
+		unless ($pkg =~ /\.rpm$/);
+
+	my $self = {
+		pkg	=> $pkg,
+		line	=> 0,
+		lvl	=> 0,
+	};
+
+#	push @All, $self;
+
+	bless $self, $class;
+
+	$self->initname;
+	$self->initpro;
+	$self->initreq;
+	$self->initlist;
+
+	return $self ;
+}
+
+#################################################################
+#	Model: Dump
+#################################################################
+
+sub splat
+{
+	print(Data::Dumper->Dump([ \@Pkg::All      ], [ '*Pkg::All'      ]));
+	print(Data::Dumper->Dump([ \%Pkg::Named    ], [ '*Pkg::Named'    ]));
+	print(Data::Dumper->Dump([ \%Pkg::Owner    ], [ '*Pkg::Owner'    ]));
+	print(Data::Dumper->Dump([ \%Pkg::Provider ], [ '*Pkg::Provider' ]));
+}
+
+#################################################################
+#	Main Program
+#################################################################
+
+sub main
+{
+	my $db = "xref.db";
+	my $path = shift || '.' ;
+
+	require $db;
+
+	splat;
+}
+
+main(@ARGV);

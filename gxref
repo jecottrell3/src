@@ -1,0 +1,81 @@
+#! /usr/bin/perl
+
+package main;
+
+use strict;
+use PKG;
+
+#use Data::Dumper;
+#$Data::Dumper::Sortkeys = 1;
+
+#################################################################
+#	Global Variables
+#################################################################
+
+
+our $Line = 0;
+our $TAB = '  ';
+
+#################################################################
+#	Resolver
+#################################################################
+
+sub resolve
+{
+	my $lev = shift;
+warn("resolve($lev, @_);\n");
+	
+	for my $name (@_)
+	{
+		my $pkg = PKG->find($name);
+		my $line = $pkg->{line};
+		my $flag = $line ? "$line " : '( ';
+
+		printf("%d%s%s%s\n", ++$Line,
+			$TAB x $lev, "$flag", $name);
+
+		next if ($line);
+
+		$pkg->{line} = $Line;
+		$pkg->{lev}  = $lev;
+
+		my %req = ();
+
+my @keys = sort keys %{$pkg->{req}};
+warn("$name depends on @keys\n");
+
+		for my $req (sort keys %{$pkg->{req}})
+		{
+			$pkg	=  PKG->find($req)
+				|| PKG->find($PKG::Owner{$req})
+				|| PKG->find($PKG::Provider{$req});
+
+			next if ($pkg->{name} eq $name);
+			$pkg	? ++$req{$pkg->{name}}
+				: printf("%d%s%s\n", ++$Line,
+					$TAB x $lev, $req);
+			next;
+
+			printf("%d%s%s%s\n", ++$Line,
+				$TAB x $lev, "? ", $req);
+		}
+		resolve(1 + $lev, sort keys %req) if (%req);
+		printf("%d%s%s%s\n", ++$Line,
+                       	$TAB x $lev, ') ', $name);
+	}
+}
+
+#################################################################
+#	Main Program
+#################################################################
+
+sub main
+{
+	warn("Reading...\n");
+	require 'PKG.db';
+	warn("Done...\n");
+
+	resolve(1, @ARGV);
+}
+
+main(@ARGV);

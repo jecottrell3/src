@@ -1,12 +1,30 @@
 #! /usr/bin/perl
 
+#################################################################
+#	The PKG Object
+#################################################################
+
 use strict;
 
 use Data::Dumper;
+$Data::Dumper::Sortkeys = 1;
 
 package Pkg;
 
+#################################################################
+# Class Variables
+#################################################################
+
+our @All = ();
+our %Named = ();
+our %Owner = ();
+our %Provider = ();
+
 our %File = ();
+
+#################################################################
+# Class Functions
+#################################################################
 
 sub name
 {
@@ -14,33 +32,72 @@ sub name
 	$self->{name};
 }
 
-sub genpro
+#################################################################
+# Initialize Name/Version/Release/Arch
+#	format: /path/name-release-version.arch.rpm
+#################################################################
+
+sub initname
 {
 	my $self = shift;
+
+	my @file = split(/\//, $self->{pkg});
+	$self->{file} = pop(@file);		# last is file
+	$self->{dir}  = join('/', @file);	# others are dirs
+
+	my @name = split(/-/, $self->{file});
+	$self->{rel} = pop(@name);		# last is release
+	$self->{ver} = pop(@name);		# next is version
+	my $name = join('-', @name);		# rest is name
+	$self->{name} = $name;
+
+	push(@Pkg::All, $Pkg::Named{$name} = $self);
+
+	my @arch = split(/\./, $self->{rel});
+	pop @arch ; # nuke .rpm suffix		# last is '.rpm'
+	$self->{arch} = pop(@arch);		# next is arch
+	$self->{rel} = join('.', @arch);	# rest is release
+
+}
+
+#################################################################
+# Initialize Provides List
+#################################################################
+
+sub initpro
+{
+	my $self = shift;
+	my $name = $self->{name};
 	my ($key, $val);
 
 	chomp(my @pro  = `rpm -qp --provides $self->{pkg}`);
-	$self->{PRO} = { };
-	$self->{pro} = [ @pro ];
+	$self->{prx} = [ @pro ];
+	$self->{pro} = { };
 	for (@pro)
 	{
-		s/ //g;
-		next if /[()]/;
+		s/ //g;				# nuke whitespace
+		next if /[()]/;			# parens evil
 		$val = $key = $_;
-		$key =~ s/[<=>()].*//;
-		$val =~ s/.*[<=>()]//;
-		$self->{PRO}{$key} = $val;
+		$key =~ s/[<=>()].*//;		# find key
+		$val =~ s/.*[<=>()]//;		# find value
+
+		$self->{pro}{$key} = $val;	# store
+		$Pkg::Provider{$key} = $name;
 	}
 }
 
-sub genreq
+#################################################################
+# Initialize Require List
+#################################################################
+
+sub initreq
 {
 	my $self = shift;
 	my ($key, $val);
 
 	chomp(my @req  = `rpm -qp --requires $self->{pkg}`);
-	$self->{REQ} = { };
-	$self->{req} = [ @req ];
+	$self->{rex} = [ @req ];
+	$self->{req} = { };
 	for (@req)
 	{
 		s/ //g;
@@ -48,43 +105,36 @@ sub genreq
 		$val = $key = $_;
 		$key =~ s/[<=>()].*//;
 		$val =~ s/.*[<=>()]//;
-		$self->{REQ}{$key} = $val;
+
+		$self->{req}{$key} = $val;
 	}
 }
 
-sub genlist
+#################################################################
+# Initialize File List
+#################################################################
+
+sub initlist
 {
 	my $self = shift;
 	my $name = $self->{name};
 	chomp(my @list = `rpm -qp --list     $self->{pkg}`);
-	map({ $File{$_} = $name; } @list);
+	map	{ s/ //g; }		@list;
+	map	{ $Owner{$_} = $name; }	@list;
 }
 
-sub gename
-{
-	my $self = shift;
-
-	my @file = split(/\//, $self->{pkg});
-	$self->{file} = pop(@file);
-	$self->{dir}  = join('/', @file);
-
-	my @name = split(/-/, $self->{file});
-	$self->{rel} = pop(@name);
-	$self->{ver} = pop(@name);
-	$self->{name} = join('-', @name);
-
-	my @arch = split(/\./, $self->{rel});
-	$self->{arch} = pop(@arch);
-	$self->{rel} = join('.', @arch);
-
-}
+#################################################################
+# Constructor
+#################################################################
 
 sub new
 {
 	my $class = shift;
 	my $pkg   = shift;
 
-	warn("ERROR: Not a Package File: $pkg\n") && return(undef)
+warn "new($class, $pkg)\n" ;
+
+	warn("ERROR: Not a Package File: $pkg\n") && return undef 
 		unless ($pkg =~ /\.rpm$/);
 
 	my $self = {
@@ -93,40 +143,109 @@ sub new
 		lvl	=> 0,
 	};
 
-	bless($self, $class);
-	$self->gename;
-	$self->genpro;
-	$self->genreq;
-	$self->genlist;
+#	push @All, $self;
 
-	return($self);
+	bless $self, $class;
+
+	$self->initname;
+	$self->initpro;
+	$self->initreq;
+	$self->initlist;
+
+	return $self ;
 }
+
+#################################################################
+#	Global Variables
+#################################################################
 
 package main;
 
+our @ARGS = @ARGV;
 our $Line = 0;
 our $Lvl = 0;
-our @Pkg = ();
-our %Pkg = ();
+#our @Pkg = ();
+#our %Pkg = ();
+
+#################################################################
+#	Model: Read Package Info
+#################################################################
 
 sub snarf
 {
-	while (my $pkg = shift)
+	for my $pkg (@_)
 	{
+#warn("snarf($pkg)\n");
 		my $p = Pkg->new($pkg);
-		push(@Pkg, $Pkg{$p->{name}} = $p);
+#		push(@Pkg, $Pkg{$p->{name}} = $p);
 	}
 }
 
+#################################################################
+#	Model: Dump
+#################################################################
+
 sub splat
 {
-	print(Data::Dumper->Dump([ \%Pkg  ], [ '*Pkg'  ]));
-	print(Data::Dumper->Dump([ \%File ], [ '*File' ]));
+#	print(Data::Dumper->Dump([ \@Pkg::All      ], [ '*Pkg::All'      ]));
+	print(Data::Dumper->Dump([ \%Pkg::Named    ], [ '*Pkg::Named'    ]));
+	print(Data::Dumper->Dump([ \%Pkg::Owner    ], [ '*Pkg::Owner'    ]));
+	print(Data::Dumper->Dump([ \%Pkg::Provider ], [ '*Pkg::Provider' ]));
+#	print(Data::Dumper->Dump([ \%Pkg  ], [ '*Pkg'  ]));
+#	print(Data::Dumper->Dump([ \%File ], [ '*File' ]));
 }
+
+#################################################################
+#	Resolver
+#################################################################
+
+sub resolve
+{
+	my $lev = shift;
+	
+	for my $pkg (@_)
+	{
+		my $name = $pkg->{name};
+		my $flag = $pkg->{line} || '';
+		$pkg->{line} = ++$Line;
+		$pkg->{lev}  = $lev;
+		printf("%d%s%s\n", $Line, "$flag\t" x $lev, $name);
+		next if $flag;
+
+		my @req = ();
+ 		my $type;
+		for my $req (sort keys %{$pkg->{req}})
+		{
+			$pkg	=  $Pkg::Named{$req}
+				|| $Pkg::Owner{$req}
+				|| $Pkg::Provider{$req};
+
+			$pkg	? push(@req, $pkg->{name})
+				: printf("%d%s%s\n", ++$Line,
+					"\t?", "\t" x $lev, $req);
+			next;
+
+			if ($Pkg::Named{$req})
+			{ $type = "K"; }
+			elsif ($Pkg::Owner{$req})
+			{ $type = "F"; }
+			elsif ($Pkg::Provider{$req})
+			{ $type = "P"; }
+			else
+			{ $type = "?"; }
+			printf("%s%s%s\n", "\t$type", "\t" x $lev, $req);
+		}
+	}
+}
+
+#################################################################
+#	Main Program
+#################################################################
 
 sub main
 {
 	snarf(@_);
+	resolve(1, @Pkg::All);
 	splat;
 }
 
