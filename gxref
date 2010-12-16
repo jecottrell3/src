@@ -31,7 +31,7 @@ warn("resolve($lev, @_);\n");
 		my $line = $pkg->{line};
 		my $flag = $line ? "$line " : '( ';
 
-		printf("%d%s%s%s\n", ++$Line,
+		printf("%d\t%s%s%s\n", ++$Line,
 			$TAB x $lev, "$flag", $name);
 
 		next if ($line);
@@ -52,15 +52,15 @@ warn("$name depends on @keys\n");
 
 			next if ($pkg->{name} eq $name);
 			$pkg	? ++$req{$pkg->{name}}
-				: printf("%d%s%s\n", ++$Line,
+				: printf("%d\t%s%s\n", ++$Line,
 					$TAB x $lev, $req);
 			next;
 
-			printf("%d%s%s%s\n", ++$Line,
+			printf("%d\t%s%s%s\n", ++$Line,
 				$TAB x $lev, "? ", $req);
 		}
 		resolve(1 + $lev, sort keys %req) if (%req);
-		printf("%d%s%s%s\n", ++$Line,
+		printf("%d\t%s%s%s\n", ++$Line,
                        	$TAB x $lev, ') ', $name);
 	}
 }
@@ -75,7 +75,7 @@ sub main
 	require 'PKG.db';
 	warn("Done...\n");
 
-	resolve(1, @ARGV);
+	resolve(0, @ARGV);
 }
 
 main(@ARGV);

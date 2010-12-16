@@ -27,7 +27,15 @@ our %Provider = ();	# feature -> pkg
 sub find
 {
 	my ($class, $name) = @_;
+
 	my $pkg = $Named{$name};
+	return $pkg if $pkg;
+
+	$name =~ s%.*/%%;	# nuke dirs
+	$name =~ s%-[^-]*$%%;	# nuke rel
+	$name =~ s%-[^-]*$%%;	# nuke ver
+
+	$pkg = $Named{$name};
 	return $pkg if $pkg;
 
 	for $pkg (values %Named)
