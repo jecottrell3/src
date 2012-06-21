@@ -23,7 +23,7 @@ our $TAB = '  ';
 sub resolve
 {
 	my $lev = shift;
-warn("resolve($lev, @_);\n");
+#warn("resolve($lev, @_);\n");
 	
 	for my $name (@_)
 	{
@@ -32,19 +32,26 @@ warn("resolve($lev, @_);\n");
 		my $flag = $line ? "$line " : '( ';
 
 		printf("%d\t%s%s%s\n", ++$Line,
-			$TAB x $lev, "$flag", $name);
+			$TAB x $lev, "$flag", $name)
 
-		next if ($line);
+		and next if ($line);
 
 		$pkg->{line} = $Line;
 		$pkg->{lev}  = $lev;
 
 		my %req = ();
 
-my @keys = sort keys %{$pkg->{req}};
-warn("$name depends on @keys\n");
+		my @keys = sort keys %{$pkg->{req}};
+#warn("$name depends on @keys\n");
 
-		for my $req (sort keys %{$pkg->{req}})
+		$flag = @keys ? '( ' : '= ';
+
+		printf("%d\t%s%s%s\n", ++$Line,
+			$TAB x $lev, "$flag", $name);
+
+		next unless @keys;
+
+		for my $req (@keys)
 		{
 			$pkg	=  PKG->find($req)
 				|| PKG->find($PKG::Owner{$req})
