@@ -1,0 +1,24 @@
+#! /bin/sh
+exec 0<${1:-DOD.pems}
+while read line
+do
+	case "$line" in
+	("")		continue;;
+	(issuer=*)	continue;;
+
+	(subject=*)
+		line=${line#*CN=}
+		file=${line// /_}
+		echo $file;;			# announce
+
+	("-----BEGIN CERTIFICATE-----")
+		exec 3>$file.cert		# divert
+		echo 1>&3 "$line";;		# data
+
+	("-----END CERTIFICATE-----")
+		echo 1>&3 "$line"		# data
+		exec 3>&-;;			# undivert
+
+	(*)	echo 1>&3 "$line";;		# data
+	esac
+done
