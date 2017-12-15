@@ -1,0 +1,17 @@
+#! /bin/sh
+
+NSS=/etc/pki/nssdb
+
+for DB in sql dbm
+do
+	certutil -L -d $DB:$NSS |
+	while read CERT JUNK
+	do
+		case $CERT in
+		(NOAA*)		: OK;;
+		(D[oO]D*)	: OK;;
+		(*)		continue;;
+		esac
+		echo certutil -D -d $DB:$NSS -n $CERT
+	done
+done

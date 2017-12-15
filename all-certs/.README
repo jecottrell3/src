@@ -1,0 +1,90 @@
+* Importing DOD Root and Intermediate Certificates
+
+Every so often, certificates expire, and new certs are issued by
+DISA. These must be Downloaded, Formatted, and Imported into the RHEL
+Certificate Database, which lives in /etc/pki/nssdb. The command to do
+this is "certutil".
+
+This directory uses two of my own personal ideosyncrasies:
+
+[1] Stuff I care about are in hidden files, beginning with a period.
+    Everything else is ephemeral, and can be erased with "rm *".
+[2] Some of the scripts generate scripts, or output a command to manually run.
+
+Everything is controled by running "./.make", which is actually an
+executable Makefile. Aliasing "make" to "./.make" might be a good idea.
+
+* STEPS
+
+The target "help" is the default, and provides a reminder of other targets.
+The target "all" is the main line, and does the steps listed below. Because
+this is a Makefile, the steps are named after the targets that are built, not
+the action.
+
+These first 4 steps can be run as any user, and only change the local dir
+
+[1] get     -- Downloads the DOD Cert Bundle File et al
+[2] cvt     -- Unpacks a PKCS7 Bundle into a bundle of PEM Certs
+[3] split   -- Splits each Cert into its own file
+[4] add     -- Builds a command file named "add" which must be run separately
+               Also builds a file named "del" which deletes certs.
+[5] all     -- Does the above steps.
+
+The following steps actually Install the certs into /etc/pki/nssdb
+
+[1] save    -- Saves a copy of the existing NSSDB
+[2] init    -- Initialize empty NSSDB
+[3] fix     -- Fix SELinux Context and File Permissions
+[4] install -- Adds certs to NSSDB and fixes selinux and permissions 
+
+* OTHER TARGETS, mostly not used
+
++ list  -- lists the database.
++ clean -- removes ephemeral files.
++ del   -- deletes the certs that "add" added
+
+* HELPERS
+
+.make   -- the executable Makefile that runs everything.
+.split  -- splits the pkcs7 bundle into a pem bundle
+.add    -- builds the "add" and "del" scripts. These must be run by hand,
+           typically via "sudo sh -x add".
+.nuke   -- removes any and all certs in the database.
+.import -- replacement for /usr/local/sbin/import_certs
+
+* THEORY
+
+The NSS Database is managed by the "certutil" command. It has many options,
+but most people only use a few. The -d option specifies the directory as
+well as the format, e.g. -d dbm:/etc/pki/nssdb or -d sql:/somewhere/else.
+
+Certutil supports two types of databases: the legacy security databases
+(cert8.db, key3.db, and secmod.db) and new SQLite databases (cert9.db,
+key4.db, and pkcs11.txt).
+
+A format:directory option needs to be specified for every command.
+
+These scripts manage both in parallel, altho probably only one is necessary.
+
+Certs are added with the -A option. Use -i file to specify a file,
+-a to specify ASCII format, and -n name to specify a name. A Trust string
+also needs to be specified, and always seems to be -t CT,C,C.
+
+Certs can be deleted with -D, and specifying which name with -n.
+
+The -L option lists all certs of a certain type in a directory, e.g.
+certutil -L -d $format:$dir. A specific cert can be listed in detail by
+specifying -n name, optionally with -a.
+
+A new database can be created with -N. Use an empty password.
+
+See the generated files "add" and "del" for more info.
+
+NOTE: the certutil -A command seems to always generate the following error:
+
+certutil: could not authenticate to token NSS Certificate DB.:
+SEC_ERROR_IO: An I/O error occurred during security authorization.
+
+These can be safely ignored.
+
+* END

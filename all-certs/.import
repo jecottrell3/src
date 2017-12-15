@@ -1,0 +1,32 @@
+#! /bin/sh
+
+NSS=/etc/pki/nssdb
+DOD=/etc/pki/DOD
+DOD=/etc/pki/DOD-new
+SAVE=.$(date +%F.%T)
+
+: SAVE NSSDB
+cd ${NSS};
+mkdir -p $SAVE
+mv -f  * $SAVE
+
+: DOIT: actually add the certs
+cd $DOD
+certutil -N -d sql:$NSS --empty-password
+certutil -N -d sql:$NSS --empty-password
+for file in *.cert
+do
+	name=${file%.cert}
+	name=${name// /_}	# necessary?
+	certutil -A -d sql:$NSS -n "$name" -t TC,C,C -a -i "$file"
+	certutil -A -d dbm:$NSS -n "$name" -t TC,C,C -a -i "$file"
+done
+: IGNORE ERRORS ON EVERY CERT ADD
+: certutil: could not authenticate to token NSS Certificate DB.:
+: SEC_ERROR_IO: An I/O error occurred during security authorization.
+
+: FIX: SELinux context and Permissions
+chmod -R a+r ${NSS}
+fixfiles -F restore ${NSS}
+
+: END
